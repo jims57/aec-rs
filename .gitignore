@@ -4,7 +4,4 @@ data/
 venv/
 __pycache__/
 *.dll
-*.dylib
-*.so
-*.h
 .DS_Store
