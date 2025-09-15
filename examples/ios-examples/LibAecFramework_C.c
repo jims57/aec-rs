@@ -1,53 +1,39 @@
 //
-//  LibAecFramework.cpp
-//  Enhanced AEC iOS Framework Implementation
+//  LibAecFramework_C.c
+//  Pure C implementation for iOS AEC Framework
 //
 
 #include "LibAecFramework.h"
-#include "libaec.h"
+#include <stdlib.h>
 #include <string.h>
 #include <math.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+// Include the iOS-compatible header directly
+#include "libaec_ios.h"
 
 // ============================================================================
-// MARK: - Stream Context Implementation
+// MARK: - Stream Context Implementation (C version)
 // ============================================================================
 
 struct AecStreamContext {
     Aec *aec_instance;
     uint32_t sample_rate;
     uint32_t frame_size;
-    bool enable_preprocess;
-    
-    AecStreamContext(uint32_t sr, bool preprocess) 
-        : sample_rate(sr), enable_preprocess(preprocess) {
-        frame_size = AecGetRecommendedFrameSize(sr);
-        uint32_t filter_length = AecGetRecommendedFilterLength(sr);
-        aec_instance = AecNew(frame_size, filter_length, sr, preprocess);
-    }
-    
-    ~AecStreamContext() {
-        if (aec_instance) {
-            AecDestroy(aec_instance);
-        }
-    }
+    int enable_preprocess;
 };
 
 // ============================================================================
 // MARK: - Enhanced iOS Integration Functions
 // ============================================================================
 
-extern "C" Aec *AecNewForRealtimeIOS(uint32_t sample_rate, bool enable_preprocess) {
+Aec *AecNewForRealtimeIOS(uint32_t sample_rate, bool enable_preprocess) {
     uint32_t frame_size = AecGetRecommendedFrameSize(sample_rate);
     uint32_t filter_length = AecGetRecommendedFilterLength(sample_rate);
     
     return AecNew(frame_size, filter_length, sample_rate, enable_preprocess);
 }
 
-extern "C" Aec *AecNewForFileProcessing(uint32_t sample_rate, bool enable_preprocess) {
+Aec *AecNewForFileProcessing(uint32_t sample_rate, bool enable_preprocess) {
     // For file processing, we can use a larger filter length for better quality
     uint32_t frame_size = AecGetRecommendedFrameSize(sample_rate);
     uint32_t filter_length = AecGetRecommendedFilterLength(sample_rate) * 2; // Double for file processing
@@ -55,11 +41,11 @@ extern "C" Aec *AecNewForFileProcessing(uint32_t sample_rate, bool enable_prepro
     return AecNew(frame_size, filter_length, sample_rate, enable_preprocess);
 }
 
-extern "C" int AecProcessAudioFiles(Aec *aec_ptr,
-                                   const int16_t *rec_samples,
-                                   const int16_t *echo_samples,
-                                   int16_t *out_samples,
-                                   size_t num_samples) {
+int AecProcessAudioFiles(Aec *aec_ptr,
+                        const int16_t *rec_samples,
+                        const int16_t *echo_samples,
+                        int16_t *out_samples,
+                        size_t num_samples) {
     if (!aec_ptr || !rec_samples || !echo_samples || !out_samples) {
         return -1; // Invalid parameters
     }
@@ -80,7 +66,7 @@ extern "C" int AecProcessAudioFiles(Aec *aec_ptr,
     return 0; // Success
 }
 
-extern "C" uint32_t AecGetRecommendedFrameSize(uint32_t sample_rate) {
+uint32_t AecGetRecommendedFrameSize(uint32_t sample_rate) {
     // Frame size for 10ms at different sample rates
     switch (sample_rate) {
         case 8000:  return 80;
@@ -93,7 +79,7 @@ extern "C" uint32_t AecGetRecommendedFrameSize(uint32_t sample_rate) {
     }
 }
 
-extern "C" uint32_t AecGetRecommendedFilterLength(uint32_t sample_rate) {
+uint32_t AecGetRecommendedFilterLength(uint32_t sample_rate) {
     // Filter length for 100ms at different sample rates
     switch (sample_rate) {
         case 8000:  return 800;
@@ -110,15 +96,30 @@ extern "C" uint32_t AecGetRecommendedFilterLength(uint32_t sample_rate) {
 // MARK: - Real-time Streaming API Implementation
 // ============================================================================
 
-extern "C" AecStreamContext *AecCreateStreamContext(uint32_t sample_rate, bool enable_preprocess) {
-    return new AecStreamContext(sample_rate, enable_preprocess);
+AecStreamContext *AecCreateStreamContext(uint32_t sample_rate, bool enable_preprocess) {
+    AecStreamContext *ctx = (AecStreamContext*)malloc(sizeof(AecStreamContext));
+    if (!ctx) return NULL;
+    
+    ctx->sample_rate = sample_rate;
+    ctx->enable_preprocess = enable_preprocess ? 1 : 0;
+    ctx->frame_size = AecGetRecommendedFrameSize(sample_rate);
+    
+    uint32_t filter_length = AecGetRecommendedFilterLength(sample_rate);
+    ctx->aec_instance = AecNew(ctx->frame_size, filter_length, sample_rate, enable_preprocess);
+    
+    if (!ctx->aec_instance) {
+        free(ctx);
+        return NULL;
+    }
+    
+    return ctx;
 }
 
-extern "C" int AecProcessStreamChunk(AecStreamContext *stream_ctx,
-                                    const int16_t *rec_chunk,
-                                    const int16_t *echo_chunk,
-                                    int16_t *out_chunk,
-                                    size_t chunk_size) {
+int AecProcessStreamChunk(AecStreamContext *stream_ctx,
+                         const int16_t *rec_chunk,
+                         const int16_t *echo_chunk,
+                         int16_t *out_chunk,
+                         size_t chunk_size) {
     if (!stream_ctx || !stream_ctx->aec_instance || !rec_chunk || !echo_chunk || !out_chunk) {
         return -1; // Invalid parameters
     }
@@ -133,7 +134,7 @@ extern "C" int AecProcessStreamChunk(AecStreamContext *stream_ctx,
     return 0; // Success
 }
 
-extern "C" void AecResetStreamContext(AecStreamContext *stream_ctx) {
+void AecResetStreamContext(AecStreamContext *stream_ctx) {
     if (stream_ctx && stream_ctx->aec_instance) {
         // Destroy and recreate the AEC instance to reset state
         AecDestroy(stream_ctx->aec_instance);
@@ -146,9 +147,12 @@ extern "C" void AecResetStreamContext(AecStreamContext *stream_ctx) {
     }
 }
 
-extern "C" void AecDestroyStreamContext(AecStreamContext *stream_ctx) {
+void AecDestroyStreamContext(AecStreamContext *stream_ctx) {
     if (stream_ctx) {
-        delete stream_ctx;
+        if (stream_ctx->aec_instance) {
+            AecDestroy(stream_ctx->aec_instance);
+        }
+        free(stream_ctx);
     }
 }
 
@@ -156,11 +160,11 @@ extern "C" void AecDestroyStreamContext(AecStreamContext *stream_ctx) {
 // MARK: - Utility Functions Implementation
 // ============================================================================
 
-extern "C" const char *AecGetVersion(void) {
+const char *AecGetVersion(void) {
     return "aec-rs-ios-1.0.0";
 }
 
-extern "C" bool AecIsSampleRateSupported(uint32_t sample_rate) {
+bool AecIsSampleRateSupported(uint32_t sample_rate) {
     switch (sample_rate) {
         case 8000:
         case 16000:
@@ -174,7 +178,7 @@ extern "C" bool AecIsSampleRateSupported(uint32_t sample_rate) {
     }
 }
 
-extern "C" void AecFloatToInt16(const float *float_samples, int16_t *int16_samples, size_t num_samples) {
+void AecFloatToInt16(const float *float_samples, int16_t *int16_samples, size_t num_samples) {
     for (size_t i = 0; i < num_samples; i++) {
         float sample = float_samples[i];
         // Clamp to [-1.0, 1.0] range
@@ -185,13 +189,8 @@ extern "C" void AecFloatToInt16(const float *float_samples, int16_t *int16_sampl
     }
 }
 
-extern "C" void AecInt16ToFloat(const int16_t *int16_samples, float *float_samples, size_t num_samples) {
+void AecInt16ToFloat(const int16_t *int16_samples, float *float_samples, size_t num_samples) {
     for (size_t i = 0; i < num_samples; i++) {
         float_samples[i] = (float)(int16_samples[i]) / 32767.0f;
     }
 }
-
-#ifdef __cplusplus
-}
-#endif
-

@@ -1,0 +1,10 @@
+framework module LibWqAec {
+    umbrella header "LibAecFramework.h"
+    export *
+    module * { export * }
+    
+    explicit module libaec {
+        header "libaec.h"
+        export *
+    }
+}
